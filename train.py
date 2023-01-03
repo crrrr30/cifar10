@@ -92,7 +92,7 @@ if __name__ == '__main__':
 
     model = LitClassifier(vars(args))
     trainer = pl.Trainer(
-        default_root_dir=".",
+        default_root_dir="./drive/MyDrive/cifar10",
         enable_progress_bar=True,
         max_epochs=args.num_epochs,
         devices=torch.cuda.device_count(),
