@@ -102,9 +102,7 @@ if __name__ == '__main__':
     )
 
     print("==> Optimizing LR")
-    lr_finder = trainer.tuner.lr_find(model)
-    fig = lr_finder.plot(suggest=True)
-    fig.show()
+    trainer.tune(model)
 
     if args.resume:
         model.load_from_checkpoint(args.resume)
