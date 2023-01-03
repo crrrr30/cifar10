@@ -20,7 +20,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description = 'Train CIFAR-10')
     
     parser.add_argument('--num-epochs', help = 'Number of epochs to train the model for', default = 500, type = int)
-    parser.add_argument('--batch-size', help = 'Batch size', default = 128, type = int)
+    parser.add_argument('--batch-size', help = 'Batch size', default = 512, type = int)
     parser.add_argument('--log', help = 'Directory to save logs to', default = 'logs', type = str)
     parser.add_argument('--resume', help = 'Directory of the checkpoint to resume from or the path to the checkpoint', default = None, type = str)
     parser.add_argument('--checkpoint-interval', help = 'Frequency of saving checkpoints', default = 5, type = str)
@@ -109,6 +109,6 @@ if __name__ == '__main__':
     if args.resume:
         model.load_from_checkpoint(args.resume)
         
-    print(f'Number of total params: {sum([np.prod(p.shape) for p in model.parameters()])}')
+    print(f'Number of total params: {sum([np.prod(p.shape) for p in model.parameters()]):,}')
 
     trainer.fit(model, train_dataloader, test_dataloader)
