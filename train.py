@@ -1,15 +1,18 @@
+import argparse
+import numpy as np
+
+
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
 
-import os, glob, tqdm, argparse
-import numpy as np
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import LinearLR
+import pytorch_lightning as pl
+
+from model import Model
 
 from data_loader import get_train_dataloader, get_test_dataloader
-from model import Model
-from efficientnet import EfficientNetB0
-from solver import Solver
-from optimizers import Ranger
 
 
 def parse_args():
@@ -19,83 +22,93 @@ def parse_args():
     parser.add_argument('--num-epochs', help = 'Number of epochs to train the model for', default = 500, type = int)
     parser.add_argument('--batch-size', help = 'Batch size', default = 128, type = int)
     parser.add_argument('--log', help = 'Directory to save logs to', default = 'logs', type = str)
-    parser.add_argument('--checkpoint-interval', help = 'Frequency of saving checkpoints', default = 5, type = str)
-    parser.add_argument('--gpu', help = 'Specify which GPU to use (separate with commas). -1 means to use CPU', default = None, type = str)
     parser.add_argument('--resume', help = 'Directory of the checkpoint to resume from or the path to the checkpoint', default = None, type = str)
+    parser.add_argument('--checkpoint-interval', help = 'Frequency of saving checkpoints', default = 5, type = str)
+    parser.add_argument('--half', help = 'Whether to use mixed precision training', default = True, type = bool)
     
     return parser.parse_args()
 
 
-if __name__ == '__main__':
+class LitClassifier(pl.LightningModule):
+        def __init__(self, model_config):
+            super().__init__()
+            self.automatic_optimization = False
+            # self.hyperparams = get_hyperparams(model_config["timesteps"], device=self.device)
+            self.num_epochs = model_config["num_epochs"]
+            self.latent_dim = model_config["checkpoint-interval"]
+            self.model = Model()
+            self.criterion = nn.CrossEntropyLoss()
+        def forward(self, x):
+            return self.model(x)
+        def configure_optimizers(self):
+            optimizer = AdamW(self.model.parameters(), lr=1e-3, weight_decay=1e-2)
+            scheduler = LinearLR(
+                optimizer,
+                start_factor=0.0015,
+                end_factor=0.0195,
+                total_iters=self.trainer.estimated_stepping_batches * self.num_epochs
+            )
+            return [optimizer], [scheduler]
+        def training_step(self, data, idx):
+            optimizer = self.optimizers()
+            scheduler = self.lr_schedulers()
+            optimizer.zero_grad()
+            x, y = data
+            y_hat = self.model(x)
+            loss = self.criterion(y_hat, y)
+            self.log("train_loss", loss)
+            self.manual_backward(loss)
+            optimizer.step()
+            scheduler.step()
+            return {
+                "loss": loss,
+                "progress_bar": {
+                    "Loss": loss
+                }
+            }
+        # def on_save_checkpoint(self, checkpoint):
+        #     sample_and_save(self.hyperparams, self.model, self.vae, self.current_epoch, self.latent_size, num=8)
+        def validation_step(self, data, idx):
+            x, y = data
+            y_hat = self.model(x)
+            loss = self.criterion(y_hat, y)
+            _, predicted = y_hat.max(1)
+            total = y.size(0)
+            correct = predicted.eq(y).sum().item()
+            self.log("val_loss", loss)
+            self.log("val_acc", correct / total)
 
-    start_epoch = 0
+
+if __name__ == '__main__':
 
     args = parse_args()
     
-    if args.gpu is not None:
-        os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-        os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
-
-    if torch.cuda.is_available():
-        device = 'cuda'
-    else:
-        device = 'cpu'
-
-
     print('==> Prepping data...')
     train_dataloader = get_train_dataloader(args.batch_size)
     test_dataloader = get_test_dataloader(args.batch_size)
 
     print('==> Building CNN...')
-    model = Model()
-    if device == 'cuda' and torch.cuda.device_count() > 1:
-        model = nn.DataParallel(model)
-        cudnn.benchmark = True
+    
+    tb_logger = pl.loggers.TensorBoardLogger(
+        "lightning_logs/",
+    )
 
-    model.to(device)
+    model = LitClassifier(vars(args))
+    trainer = pl.Trainer(
+        # auto_scale_batch_size="binsearch",
+        default_root_dir=".",
+        precision=16 if args.half_precision else 32,
+        max_epochs=args.num_epochs,
+        devices=torch.cuda.device_count(),
+        accelerator="gpu",
+        callbacks=[],
+        logger=tb_logger,
+        check_val_every_n_epoch=args.checkpoint_interval
 
-    optimizer = Ranger(model.parameters())
-
+    )
     if args.resume:
-
-        if os.path.isdir(args.resume):
-            checkpoint = torch.load(
-                sorted(glob.glob(os.path.join(args.resume, 'checkpoint*.pkl'))).pop(),
-            map_location = lambda _, __: _)
-            print(f'Resuming from epoch {checkpoint["epoch"] + 1}...')
-            start_epoch = checkpoint["epoch"] + 1
-            model.load_state_dict(checkpoint['model_state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        model.load_from_checkpoint(args.resume)
         
-        elif os.path.isdir(args.resume):
-            checkpoint = torch.load(
-                sorted(glob.glob(os.path.join(args.log, args.resume, 'checkpoint*.pkl'))).pop(),
-            map_location = lambda _, __: _)
-            print(f'Resuming from epoch {checkpoint["epoch"] + 1}...')
-            start_epoch = checkpoint["epoch"] + 1
-            model.load_state_dict(checkpoint['model_state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        
-        else:
-            raise FileNotFoundError(f'Checkpoint not found at {args.resume}!')  
-
     print(f'Number of total params: {sum([np.prod(p.shape) for p in model.parameters()])}')
 
-    if start_epoch >= args.num_epochs: 
-        print('The model has already been trained for the number of epochs required')
-
-    if not os.path.exists(args.log):
-        os.makedirs(args.log)
-    index = 0 if len(os.listdir(args.log)) == 0 else int(sorted(os.listdir(args.log)).pop()[:4]) + 1
-    args.log = os.path.join(args.log, '%.4d-train' % index)
-    os.makedirs(args.log)
-    print(f'==> Saving logs to {args.log}')
-
-    solver = Solver(
-        model = model, optimizer = optimizer, criterion = nn.CrossEntropyLoss(),
-        start_epoch = start_epoch, num_epochs = args.num_epochs, device = device, 
-        log_dir = args.log,  checkpoint_interval = args.checkpoint_interval,
-    )
-    
-    print(f'==> Training for {args.num_epochs} epochs...')
-    solver.train(train_dataloader, test_dataloader)
+    trainer.fit(model, train_dataloader, test_dataloader)
