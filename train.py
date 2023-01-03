@@ -4,7 +4,6 @@ import numpy as np
 
 import torch
 import torch.nn as nn
-import torch.backends.cudnn as cudnn
 
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LinearLR
@@ -33,14 +32,13 @@ class LitClassifier(pl.LightningModule):
         def __init__(self, model_config):
             super().__init__()
             self.automatic_optimization = False
-            # self.hyperparams = get_hyperparams(model_config["timesteps"], device=self.device)
             self.num_epochs = model_config["num_epochs"]
             self.model = Model()
             self.criterion = nn.CrossEntropyLoss()
         def forward(self, x):
             return self.model(x)
         def configure_optimizers(self):
-            optimizer = AdamW(self.model.parameters(), lr=1e-3, weight_decay=1e-2)
+            optimizer = AdamW(self.model.parameters(), lr=self.learning_rate, weight_decay=1e-2)
             scheduler = LinearLR(
                 optimizer,
                 start_factor=0.0015,
@@ -88,23 +86,27 @@ if __name__ == '__main__':
 
     print('==> Building CNN...')
     
-    tb_logger = pl.loggers.TensorBoardLogger(
-        "lightning_logs/",
-    )
+    tb_logger = pl.loggers.TensorBoardLogger(".")
 
     model = LitClassifier(vars(args))
     trainer = pl.Trainer(
-        # auto_scale_batch_size="binsearch",
+        auto_lr_find=True,
+        accumulate_grad_batches=2048 // args.batch_size,
         default_root_dir=".",
-        precision=16 if args.half_precision else 32,
         max_epochs=args.num_epochs,
         devices=torch.cuda.device_count(),
         accelerator="gpu",
         callbacks=[],
         logger=tb_logger,
-        check_val_every_n_epoch=args.checkpoint_interval
-
+        check_val_every_n_epoch=args.checkpoint_interval,
+        precision=16 if args.half else 32,
     )
+
+    print("==> Optimizing LR")
+    lr_finder = trainer.tuner.lr_find(model)
+    fig = lr_finder.plot(suggest=True)
+    fig.show()
+
     if args.resume:
         model.load_from_checkpoint(args.resume)
         
