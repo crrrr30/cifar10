@@ -91,7 +91,6 @@ if __name__ == '__main__':
     model = LitClassifier(vars(args))
     trainer = pl.Trainer(
         auto_lr_find=True,
-        accumulate_grad_batches=2048 // args.batch_size,
         default_root_dir=".",
         max_epochs=args.num_epochs,
         devices=torch.cuda.device_count(),
