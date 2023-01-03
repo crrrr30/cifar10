@@ -29,8 +29,9 @@ def parse_args():
 
 
 class LitClassifier(pl.LightningModule):
-        def __init__(self, model_config):
+        def __init__(self, model_config, lr=1e-3):
             super().__init__()
+            self.learning_rate = lr
             self.automatic_optimization = False
             self.num_epochs = model_config["num_epochs"]
             self.model = Model()
