@@ -91,7 +91,6 @@ if __name__ == '__main__':
 
     model = LitClassifier(vars(args))
     trainer = pl.Trainer(
-        train_dataloader=train_dataloader,
         auto_lr_find=True,
         default_root_dir=".",
         max_epochs=args.num_epochs,
