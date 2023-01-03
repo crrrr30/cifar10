@@ -1,3 +1,5 @@
+from pytorch_lightning.tuner import lr_finder
+
 import argparse
 import numpy as np
 
@@ -28,7 +30,7 @@ def parse_args():
 
 
 class LitClassifier(pl.LightningModule):
-        def __init__(self, model_config, lr=1e-3):
+        def __init__(self, model_config, lr=5e-4):
             super().__init__()
             self.learning_rate = lr
             self.automatic_optimization = False
@@ -83,10 +85,8 @@ if __name__ == '__main__':
     
     tb_logger = pl.loggers.TensorBoardLogger(".")
 
-
     model = LitClassifier(vars(args))
     trainer = pl.Trainer(
-        auto_lr_find=True,
         default_root_dir=".",
         max_epochs=args.num_epochs,
         devices=torch.cuda.device_count(),
