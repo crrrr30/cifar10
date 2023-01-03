@@ -57,12 +57,7 @@ class LitClassifier(pl.LightningModule):
             self.manual_backward(loss)
             optimizer.step()
             scheduler.step()
-            return {
-                "loss": loss,
-                "progress_bar": {
-                    "Loss": loss
-                }
-            }
+            return loss
         # def on_save_checkpoint(self, checkpoint):
         #     sample_and_save(self.hyperparams, self.model, self.vae, self.current_epoch, self.latent_size, num=8)
         def validation_step(self, data, idx):
