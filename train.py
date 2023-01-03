@@ -1,7 +1,6 @@
 import argparse
 import numpy as np
 
-
 import torch
 import torch.nn as nn
 
@@ -89,6 +88,7 @@ if __name__ == '__main__':
     
     tb_logger = pl.loggers.TensorBoardLogger(".")
 
+
     model = LitClassifier(vars(args))
     trainer = pl.Trainer(
         auto_lr_find=True,
@@ -103,7 +103,7 @@ if __name__ == '__main__':
     )
 
     print("==> Optimizing LR")
-    trainer.tune(model)
+    trainer.tune(model, train_dataloader)
 
     if args.resume:
         model.load_from_checkpoint(args.resume)
