@@ -59,7 +59,12 @@ class LitClassifier(pl.LightningModule):
             self.manual_backward(loss)
             optimizer.step()
             scheduler.step()
-            return loss
+            return {
+                "loss": loss,
+                "progress_bar": {
+                    "loss": loss.item()
+                }
+            }
         # def on_save_checkpoint(self, checkpoint):
         #     sample_and_save(self.hyperparams, self.model, self.vae, self.current_epoch, self.latent_size, num=8)
         def validation_step(self, data, idx):
@@ -88,6 +93,7 @@ if __name__ == '__main__':
     model = LitClassifier(vars(args))
     trainer = pl.Trainer(
         default_root_dir=".",
+        enable_progress_bar=True,
         max_epochs=args.num_epochs,
         devices=torch.cuda.device_count(),
         accelerator="gpu",
