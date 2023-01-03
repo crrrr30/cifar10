@@ -35,7 +35,6 @@ class LitClassifier(pl.LightningModule):
             self.automatic_optimization = False
             # self.hyperparams = get_hyperparams(model_config["timesteps"], device=self.device)
             self.num_epochs = model_config["num_epochs"]
-            self.latent_dim = model_config["checkpoint-interval"]
             self.model = Model()
             self.criterion = nn.CrossEntropyLoss()
         def forward(self, x):
