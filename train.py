@@ -35,7 +35,7 @@ class LitClassifier(pl.LightningModule):
             self.learning_rate = lr
             self.automatic_optimization = False
             self.num_epochs = model_config["num_epochs"]
-            self.model = Model()
+            self.model = Model(32)
             self.criterion = nn.CrossEntropyLoss()
         def forward(self, x):
             return self.model(x)
