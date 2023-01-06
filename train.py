@@ -55,7 +55,7 @@ class LitClassifier(pl.LightningModule):
             x, y = data
             y_hat = self.model(x)
             loss = self.criterion(y_hat, y)
-            self.log("train_loss", loss)
+            self.log("train_loss", loss, prog_bar=True)
             self.manual_backward(loss)
             optimizer.step()
             scheduler.step()
@@ -74,8 +74,8 @@ class LitClassifier(pl.LightningModule):
             _, predicted = y_hat.max(1)
             total = y.size(0)
             correct = predicted.eq(y).sum().item()
-            self.log("val_loss", loss)
-            self.log("val_acc", correct / total)
+            self.log("val_loss", loss, prog_bar=True)
+            self.log("val_acc", correct / total, prog_bar=True)
 
 
 if __name__ == '__main__':
