@@ -1,9 +1,11 @@
+from multiprocessing import cpu_count
+
 import torch
 import torchvision
 import torchvision.transforms as transforms
 
 
-def get_train_dataloader(batch_size = 128, num_workers = 4):
+def get_train_dataloader(batch_size = 128, num_workers = None):
     
     transform_train = transforms.Compose([
         transforms.RandomCrop(32, padding = 4),
@@ -16,7 +18,7 @@ def get_train_dataloader(batch_size = 128, num_workers = 4):
         root='./data', train = True, download = True, transform = transform_train)
 
     train_dataloader = torch.utils.data.DataLoader(
-        training_set, batch_size = batch_size, shuffle = True, num_workers = num_workers)
+        training_set, batch_size = batch_size, shuffle = True, num_workers = num_workers if num_workers is not None else cpu_count())
     
     return train_dataloader
 

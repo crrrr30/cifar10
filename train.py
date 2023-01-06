@@ -74,8 +74,8 @@ class LitClassifier(pl.LightningModule):
             _, predicted = y_hat.max(1)
             total = y.size(0)
             correct = predicted.eq(y).sum().item()
-            self.log("val_loss", loss, prog_bar=True)
-            self.log("val_acc", correct / total, prog_bar=True)
+            self.log("val_loss", loss, prog_bar=True, on_epoch=True)
+            self.log("val_acc", correct / total, prog_bar=True, on_epoch=True)
 
 
 if __name__ == '__main__':
