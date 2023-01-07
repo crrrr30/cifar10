@@ -249,6 +249,7 @@ class gMLPVision(nn.Module):
         *,
         image_size,
         patch_size,
+        num_classes,
         dim,
         depth,
         heads = 1,
