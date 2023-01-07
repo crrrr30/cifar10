@@ -10,7 +10,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import LinearLR
 import pytorch_lightning as pl
 
-from model import Model
+from model import *
 
 from data_loader import get_train_dataloader, get_test_dataloader
 
@@ -35,12 +35,12 @@ class LitClassifier(pl.LightningModule):
             self.learning_rate = lr
             self.automatic_optimization = False
             self.num_epochs = model_config["num_epochs"]
-            self.model = Model(32)
+            self.model = gMLPVision(image_size=32, patch_size=4, num_classes=10, dim=512, depth=8, heads=8)
             self.criterion = nn.CrossEntropyLoss()
         def forward(self, x):
             return self.model(x)
         def configure_optimizers(self):
-            optimizer = AdamW(self.model.parameters(), lr=self.learning_rate, weight_decay=1e-2)
+            optimizer = AdamW(self.model.parameters(), lr=self.learning_rate)
             scheduler = LinearLR(
                 optimizer,
                 start_factor=0.0015,
@@ -65,8 +65,6 @@ class LitClassifier(pl.LightningModule):
                     "loss": loss.item()
                 }
             }
-        # def on_save_checkpoint(self, checkpoint):
-        #     sample_and_save(self.hyperparams, self.model, self.vae, self.current_epoch, self.latent_size, num=8)
         def validation_step(self, data, idx):
             x, y = data
             y_hat = self.model(x)

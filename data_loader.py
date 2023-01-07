@@ -5,7 +5,7 @@ import torchvision
 import torchvision.transforms as transforms
 
 
-def get_train_dataloader(batch_size = 128, num_workers = None):
+def get_train_dataloader(batch_size, num_workers = None):
     
     transform_train = transforms.Compose([
         transforms.RandomCrop(32, padding = 4),
@@ -23,7 +23,7 @@ def get_train_dataloader(batch_size = 128, num_workers = None):
     return train_dataloader
 
 
-def get_test_dataloader(batch_size = 128, num_workers = 4):
+def get_test_dataloader(batch_size, num_workers = 4):
 
     transform_test = transforms.Compose([
         transforms.ToTensor(),
