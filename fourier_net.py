@@ -36,6 +36,8 @@ import numpy as np
 import math
 from timm.models.vision_transformer import PatchEmbed, Attention
 
+from einops.layers.torch import Rearrange
+
 
 class Mlp(nn.Module):
     """ MLP as used in Vision Transformer, MLP-Mixer and related networks
@@ -154,7 +156,7 @@ class DiTBlock(nn.Module):
         self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
-        approx_gelu = lambda: nn.GELU()
+        approx_gelu = lambda: nn.GELU(approximate="tanh")
         self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=approx_gelu, drop=0)
         self.adaLN_modulation = nn.Sequential(
             nn.SiLU(),
@@ -174,7 +176,7 @@ class FMLPBlock(nn.Module):
     """
     def __init__(self, hidden_size, num_heads, num_channels, mlp_ratio=4.0, **block_kwargs):
         super().__init__()
-        approx_gelu = lambda: nn.GELU()
+        approx_gelu = lambda: nn.GELU(approximate="tanh")
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.channel_mixing_mlp = Mlp(in_features=num_channels, hidden_features=num_heads * num_channels, act_layer=approx_gelu)
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
@@ -184,32 +186,59 @@ class FMLPBlock(nn.Module):
             nn.SiLU(),
             nn.Linear(hidden_size, 6 * hidden_size, bias=True)
         )
+        self.fourier_adaLN_modulation = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(hidden_size, 6 * hidden_size, bias=True)
+        )
+
+        self.self_conditioning_mlp = nn.Sequential(
+            Rearrange("b n d -> b d n"),
+            nn.Linear(num_channels, 1),
+            nn.Flatten()
+        )
+
         self.fourier_norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.fourier_cmm = Mlp(in_features=num_channels * 2, hidden_features=num_heads * num_channels * 2, act_layer=approx_gelu)
         self.fourier_norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.fourier_tmm = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=approx_gelu)
         self.fourier_final = nn.Sequential(
-            nn.Linear(hidden_size, 1), 
-            nn.Flatten(),
-            nn.Linear(num_channels * 2, hidden_size)
+            Rearrange("b n d -> b d n"),
+            nn.Linear(num_channels * 2, num_channels),
+            Rearrange("b d n -> b n d")
         )
 
     def forward(self, x):
-        c = torch.fft.fft(x)
-        c = torch.cat([c.real, c.imag], dim=1)
-        c = c + self.fourier_cmm(self.fourier_norm1(c).permute(0, 2, 1)).permute(0, 2, 1)
-        c = c + self.fourier_tmm(self.fourier_norm2(c))
-        c = self.fourier_final(c)
-        shift_cmm, scale_cmm, gate_cmm, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
+        c = self.self_conditioning_mlp(x)
+
+        shift_cmm, scale_cmm, gate_cmm, shift_tmm, scale_tmm, gate_tmm = self.adaLN_modulation(c).chunk(6, dim=1)
 
         x = x + gate_cmm.unsqueeze(1) * \
             self.channel_mixing_mlp(
                 modulate(self.norm1(x), shift_cmm, scale_cmm).permute(0, 2, 1)
             ).permute(0, 2, 1)
-        x = x + gate_mlp.unsqueeze(1) * \
+        x = x + gate_tmm.unsqueeze(1) * \
             self.mlp(
-                modulate(self.norm2(x), shift_mlp, scale_mlp)
+                modulate(self.norm2(x), shift_tmm, scale_tmm)
             )
+        
+        shift_cmm, scale_cmm, gate_cmm, shift_tmm, scale_tmm, gate_tmm = self.fourier_adaLN_modulation(c).chunk(6, dim=1)
+        
+        # Forward Fourier
+        x = torch.fft.fft(x)
+        x = torch.cat([x.real, x.imag], dim=1)
+        x = x + gate_cmm.unsqueeze(1) * \
+            self.fourier_cmm(
+                modulate(self.fourier_norm1(x), shift_cmm, scale_cmm).permute(0, 2, 1)
+            ).permute(0, 2, 1)
+        x = x + gate_tmm.unsqueeze(1) * \
+            self.fourier_tmm(
+                modulate(self.fourier_norm2(x), shift_tmm, scale_tmm)
+            )
+        # Inverse Fourier
+        re, im = x.chunk(2, dim=1)
+        x = torch.fft.ifft(re + 1j * im)
+        x = torch.cat([x.real, x.imag], axis=1)
+        x = self.fourier_final(x)        
         return x
 
 
@@ -416,8 +445,9 @@ def FMLPS_8(**kwargs):
     return FMLP(depth=12, hidden_size=384, patch_size=8, num_heads=6, **kwargs)
 
 if __name__ == "__main__":
-    model = FMLPS_4()
-    x = torch.randn(4, 3, 32, 32)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = FMLPS_4().to(device)
+    x = torch.randn(4, 3, 32, 32).to(device)
     import time
     t0 = time.time()
     y = model(x)
