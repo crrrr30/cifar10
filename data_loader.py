@@ -23,7 +23,7 @@ def get_train_dataloader(batch_size, num_workers = None):
     return train_dataloader
 
 
-def get_test_dataloader(batch_size, num_workers = 4):
+def get_test_dataloader(batch_size, num_workers = None):
 
     transform_test = transforms.Compose([
         transforms.ToTensor(),
@@ -34,6 +34,6 @@ def get_test_dataloader(batch_size, num_workers = 4):
         root='./data', train = False, download = True, transform = transform_test)
 
     test_dataloader = torch.utils.data.DataLoader(
-        testing_set, batch_size = batch_size, shuffle = False, num_workers = num_workers)
+        testing_set, batch_size = batch_size, shuffle = False, num_workers = num_workers if num_workers is not None else cpu_count())
 
     return test_dataloader

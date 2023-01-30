@@ -10,7 +10,8 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import LinearLR
 import pytorch_lightning as pl
 
-from model import *
+# from model import *
+from fourier_net import *
 
 from data_loader import get_train_dataloader, get_test_dataloader
 
@@ -35,7 +36,7 @@ class LitClassifier(pl.LightningModule):
             self.learning_rate = lr
             self.automatic_optimization = False
             self.num_epochs = model_config["num_epochs"]
-            self.model = gMLPVision(image_size=32, patch_size=4, num_classes=10, dim=512, depth=8, heads=8)
+            self.model = FMLPS_4()
             self.criterion = nn.CrossEntropyLoss()
         def forward(self, x):
             return self.model(x)
