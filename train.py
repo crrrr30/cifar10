@@ -6,11 +6,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from torch.optim import AdamW
+from torch.optim import Adam
 from torch.optim.lr_scheduler import LinearLR
 import pytorch_lightning as pl
 
-# from model import *
 from fourier_net import *
 
 from data_loader import get_train_dataloader, get_test_dataloader
@@ -31,7 +30,7 @@ def parse_args():
 
 
 class LitClassifier(pl.LightningModule):
-        def __init__(self, model_config, lr=5e-4):
+        def __init__(self, model_config, lr=1e-4):
             super().__init__()
             self.learning_rate = lr
             self.automatic_optimization = False
@@ -41,7 +40,7 @@ class LitClassifier(pl.LightningModule):
         def forward(self, x):
             return self.model(x)
         def configure_optimizers(self):
-            optimizer = AdamW(self.model.parameters(), lr=self.learning_rate)
+            optimizer = Adam(self.model.parameters(), lr=self.learning_rate, weight_decay=.1)
             scheduler = LinearLR(
                 optimizer,
                 start_factor=0.0015,
@@ -56,14 +55,17 @@ class LitClassifier(pl.LightningModule):
             x, y = data
             y_hat = self.model(x)
             loss = self.criterion(y_hat, y)
-            self.log("train_loss", loss, prog_bar=True)
             self.manual_backward(loss)
+            self.log("train_loss", loss, prog_bar=True)
+            norm = torch.nn.utils.clip_grad.clip_grad_norm(self.model.parameters(), max_norm=1.)
+            self.log("grad_norm", norm.item(), prog_bar=True)
             optimizer.step()
             scheduler.step()
             return {
                 "loss": loss,
                 "progress_bar": {
-                    "loss": loss.item()
+                    "loss": loss.item(),
+                    "grad_norm": norm.item(),
                 }
             }
         def validation_step(self, data, idx):
@@ -91,7 +93,7 @@ if __name__ == '__main__':
 
     model = LitClassifier(vars(args))
     trainer = pl.Trainer(
-        default_root_dir="./drive/MyDrive/cifar10",
+        default_root_dir=".",
         enable_progress_bar=True,
         max_epochs=args.num_epochs,
         devices=torch.cuda.device_count(),

@@ -224,7 +224,8 @@ class FMLPBlock(nn.Module):
         shift_cmm, scale_cmm, gate_cmm, shift_tmm, scale_tmm, gate_tmm = self.fourier_adaLN_modulation(c).chunk(6, dim=1)
         
         # Forward Fourier
-        x = torch.fft.fft(x)
+        x_type = x.type()
+        x = torch.fft.fft(x.float())
         x = torch.cat([x.real, x.imag], dim=1)
         x = x + gate_cmm.unsqueeze(1) * \
             self.fourier_cmm(
@@ -237,8 +238,8 @@ class FMLPBlock(nn.Module):
         # Inverse Fourier
         re, im = x.chunk(2, dim=1)
         x = torch.fft.ifft(re + 1j * im)
-        x = torch.cat([x.real, x.imag], axis=1)
-        x = self.fourier_final(x)        
+        x = torch.cat([x.real, x.imag], axis=1).type(x_type)
+        x = self.fourier_final(x)
         return x
 
 
