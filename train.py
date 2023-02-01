@@ -34,6 +34,7 @@ class LitClassifier(pl.LightningModule):
             self.num_epochs = model_config["num_epochs"]
             self.model = FMLPS_4()
             self.criterion = nn.CrossEntropyLoss()
+            self.save_hyperparameters()
         def forward(self, x):
             return self.model(x)
         def configure_optimizers(self):
@@ -52,7 +53,7 @@ class LitClassifier(pl.LightningModule):
             x, y = data
             y_hat = self.model(x)
             loss = self.criterion(y_hat, y)
-            self.log("train_loss", loss, prog_bar=False)
+            self.log("train_loss", loss, logger=True, on_step=True)
             return loss
         def validation_step(self, data, idx):
             x, y = data
